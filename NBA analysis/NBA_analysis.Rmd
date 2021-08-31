@@ -1,0 +1,254 @@
+---
+title: "NBA_analysis"
+author: "Alexander Nicholls"
+date: "25/08/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(janitor)
+library(tidyverse)
+library(hablar)
+library(corrplot)
+library(measurements)
+library(rpart)
+library(randomForest)
+library(olsrr)
+
+```
+
+```{r}
+setwd("C:/Users/alexa/Documents/GitHub/anic0077.github.io/NBA_stats")
+nba_2021<- read.csv("2020-2021 NBA Stats  Player Box Score  Advanced Metrics.csv")
+names(nba_2021) <- NULL
+
+nba_2021 <- janitor::row_to_names(nba_2021, row_number = 1)
+nba_2021 <- nba_2021 %>% 
+  rename(
+    "name" = "FULL NAME",
+    "MIN%" = "MIN%Minutes PercentagePercentage of team minutes used by a player while he was on the floor",
+    "USG%" = "USG%Usage RateUsage rate, a.k.a., usage percentage is an estimate of the percentage of team plays used by a player while he was on the floor",
+    "TO%" = "TO%Turnover RateA metric that estimates the number of turnovers a player commits per 100 possessions",
+    "eFG" = "eFG%Effective Shooting PercentageWith eFG%, three-point shots made are worth 50% more than two-point shots made. eFG% Formula=(FGM+ (0.5 x 3PM))/FGA",
+    "TS%" = "TS%True Shooting PercentageTrue shooting percentage is a measure of shooting efficiency that takes into account field goals, 3-point field goals, and free throws.",
+    "PPG" = "PPGPointsPoints per game.",
+    "RPG" = "RPGReboundsRebounds per game.",
+   
+    "TRB%" = "TRB%Total Rebound PercentageTotal rebound percentage is estimated percentage of available rebounds grabbed by the player while the player is on the court.", 
+    "APG" = "APGAssistsAssists per game.",
+    "AST%" = "AST%Assist PercentageAssist percentage is an estimated percentage of teammate field goals a player assisted while the player is on the court",
+    "SPG" = "SPGStealsSteals per game.",
+    "BPG%" = "BPGBlocksBlocks per game.",
+    "TOPG" = "TOPGTurnoversTurnovers per game.",
+    "VIV" = "VIVersatility IndexVersatility index is a metric that measures a player’s ability to produce in points, assists, and rebounds. The average player will score around a five on the index, while top players score above 10",
+    "ORTG" = "ORTGOffensive RatingIndividual offensive rating is the number of points produced by a player per 100 total individual possessions.",
+    "DRTG" = "DRTGDefensive RatingIndividual defensive rating estimates how many points the player allowed per 100 possessions he individually faced while staying on the court."
+    
+    )
+nba_2021$RANK <- as.factor(nba_2021$RANK)
+nba_2021$name <- as.factor(nba_2021$name)
+nba_2021$TEAM <- as.factor(nba_2021$TEAM)
+nba_2021$POS <- as.factor(nba_2021$POS)
+nba_2021 <- nba_2021 %>% mutate_if(is.character,as.numeric)
+nba_2021$name <- as.character(nba_2021$name)
+#nba_2021 <- nba_2021[ c(1) ]
+
+```
+
+
+preliminary analysis
+```{r}
+salary_2021 <- read.csv("C:/Users/alexa/Documents/GitHub/anic0077.github.io/NBA_stats/Salary_2021.csv")
+drop <- c("RANK")
+nba_2021_cleaned = nba_2021[,!(names(nba_2021) %in% drop)]
+Nba_2021 <- merge(nba_2021_cleaned,salary_2021,by="name")
+#str(nba_2021)
+#plot(NBA_2021$salary_2021, NBA_2021$PPG)
+#plot(NBA_2021$salary_2021, NBA_2021$DRTG)
+```
+```{r}
+#hist(nba_2021$AGE)
+#corrplot(nba_2021, method="circle")
+nba_2021 <- nba_2021[ -c(1) ]
+#plot(nba_2021$ORTG, nba_2021$PPG)
+
+nba_2021 <-nba_2021[order(nba_2021$ORTG, decreasing = TRUE),]
+nba_2021
+```
+```{r}
+#plot(nba_2021$APG, nba_2021$PPG)
+```
+function for converting feet and inches to metric
+```{r}
+ft2m <- function(s) {
+  # add inches if missing or no-quotes; adding extraneous leading zeroes is okay
+  s0 <- gsub(" ", "", s)
+  s01 <- gsub("''", "", s0)
+  s1 <- gsub("'([0-9.]*)$", "'0\\1\"", s01)
+  s2 <- gsub("^([0-9.]+)\"?$", "0'\\1\"", s1)
+  gre <- gregexpr("([0-9.]+)(?=')", s2, perl = TRUE)
+  feet <- as.numeric(regmatches(s2, gre))
+  gre <- gregexpr("(?<=')([0-9.]+)(?=\")", s2, perl = TRUE)
+  inch <- as.numeric(regmatches(s2, gre))
+  0.3048 * (feet + inch/12)
+}
+```
+nba anthro
+
+```{r}
+anthro <- read.csv("C:/Users/alexa/Documents/GitHub/anic0077.github.io/NBA_stats/NBA_combine_anthro.csv")
+
+
+anthro$BODY.FAT.. <- gsub("%", "", anthro$BODY.FAT..)
+
+cols.num <- c(3:5, 9)
+anthro[cols.num] <- sapply(anthro[cols.num],as.numeric)
+sapply(anthro, class)
+
+anthro$HAND.LENGTH_cm <- 2.54*anthro$HAND.LENGTH..INCHES.
+anthro$HAND.WIDTH_cm <- 2.54*anthro$HAND.WIDTH..INCHES.
+anthro$WEIGHT_kg <- 0.454 * anthro$WEIGHT..LBS.
+anthro$HEIGHT.W.O.SHOES <- ft2m(anthro$HEIGHT.W.O.SHOES)
+anthro$HEIGHT.W..SHOES <- ft2m(anthro$HEIGHT.W..SHOES)
+anthro$STANDING.REACH <- ft2m(anthro$STANDING.REACH)
+anthro$WINGSPAN <- ft2m(anthro$WINGSPAN)
+
+drop <- c("HAND.LENGTH..INCHES.","HAND.WIDTH..INCHES.", "WEIGHT..LBS.")
+anthro_cleaned = anthro[,!(names(anthro) %in% drop)]
+
+anthro_cleaned <- anthro_cleaned[!apply(is.na(anthro_cleaned) | anthro_cleaned == "", 1, all),]
+
+#nm1 <- c(4:10) 
+#anthro[nm1] <- lapply(anthro[nm1], gsub, pattern = "'", replacement = ".")
+#anthro[nm1] <- lapply(anthro[nm1], gsub, pattern = " ", replacement = ".")
+str(anthro_cleaned)
+#anthro[c(4:10)] <- gsub("'", "", anthro[c(4:10)])
+
+#cols.num <- c(3:10)
+#anthro[cols.num] <- sapply(anthro[cols.num],as.numeric)
+#sapply(anthro, class)
+
+
+
+```
+
+
+
+
+```{r}
+strength <- read.csv("C:/Users/alexa/Documents/GitHub/anic0077.github.io/NBA_stats/NBA_combine_strength.csv")
+names(strength) <- paste(names(strength), strength[1, ], sep = "_")
+strength <- strength[-1,]
+
+cols.num <- c(3:8)
+strength[cols.num] <- sapply(strength[cols.num],as.numeric)
+sapply(strength, class)
+strength$POS_ <- as.factor(strength$POS_)
+
+strength <- strength[!apply(is.na(strength) | strength == "", 1, all),]
+
+```
+merging anthro and strength
+```{r}
+anthro_cleaned$Primary <- paste(anthro_cleaned$PLAYER,anthro_cleaned$POS,anthro_cleaned$combine.year)
+strength$Primary <- paste(strength$PLAYER,strength$POS,strength$combine_year_NA)
+combine <- merge(anthro_cleaned,strength,by="Primary")
+```
+Combining shooting stats with combine
+```{r}
+
+```
+
+cleaning combine columns
+```{r}
+combine$name <- combine$PLAYER
+drop <- c("POS_","PLAYER_", "combine_year_NA", "PLAYER")
+combine_cleaned = combine[,!(names(combine) %in% drop)]
+combine_cleaned$POS <- as.factor(combine_cleaned$POS)
+```
+
+
+```{r}
+#removing players with the same same to allow for merging
+combine_cleaned_nd <- combine_cleaned[!duplicated(combine_cleaned$name), ]
+```
+combining combine and NBA_2021
+```{r}
+NBA_2021 <- merge(x = Nba_2021,y = combine_cleaned_nd,by="name", all = TRUE)
+NBA_2021 <- NBA_2021[!is.na(NBA_2021$TEAM), ]
+
+```
+
+
+predicting salary
+```{r}
+tree = rpart(POS.x ~ AGE + GP + MPG, data = NBA_2021, method = "class")
+```
+random_forest
+```{r}
+#pcr <- prcomp(NBA_2021[,5:10], center = TRUE, scale = TRUE)
+
+#lin <- lm(salary_2021 ~ PPG * APG + `USG%`, NBA_2021)
+
+lin <- lm(salary_2021 ~ . - name - TEAM, Nba_2021)
+#ols_step_forward_p(lin)
+step <- ols_step_both_p(lin)
+step
+
+#summary(lin)
+#plot(lin)
+```
+(Intercept)          PPG          AGE          APG           GP       `AST%`  
+   -9314264       864077       625838      3092880       -26371      -358938  
+        MPG          RPG       `TRB%`        `2P%`          SPG  
+    -477370      1141683      -221837     -3369155      1653824 
+
+salary prediction model
+```{r}
+#NBA_salary <- lm(salary_2021 ~ PPG + AGE + APG + GP + `AST%` + MPG + RPG + `TRB%` + `2P%` + SPG, data = Nba_2021)
+NBA_salary <- lm(salary_2021 ~ PPG + APG + POS + GP + `AST%` + MPG + RPG + `TRB%` + `2P%` + SPG, data = Nba_2021)
+summary(NBA_salary)
+```
+
+
+
+using model to predict salaries of players
+```{r}
+#drop <- c("name","TEAM")
+#test_data = Nba_2021[,!(names(Nba_2021) %in% drop)]
+#test_data = Nba_2021
+test_data <- Nba_2021[Nba_2021$name == 'Giannis Antetokounmpo',]
+prediction <- predict.lm(NBA_salary, test_data, interval = "confidence", type = "response")
+print(prediction[1] - test_data$salary_2021 )
+#max(prediction)
+
+```
+```{r}
+count = 1
+for (i in Nba_2021$name){
+  if (duplicated(i) == TRUE){
+    i <- (i + count)
+    print(i)
+  }
+}
+```
+
+
+```{r}
+value <- data.frame(name=character(), value=numeric(), is_paid = numeric(), is_worth=numeric())
+index = 1
+Nba_2021_nd <-  Nba_2021[!duplicated(Nba_2021$name), ]
+for (i in Nba_2021_nd$name){
+  #print(i)
+  value[index, "name"] <- i
+  test_data <- Nba_2021_nd[Nba_2021_nd$name == i,]
+  prediction <- predict.lm(NBA_salary, test_data, interval = "confidence", type = "response")
+  #print(prediction[1] - test_data$salary_2021)
+  value[index, "value"] <-(prediction[1] - test_data$salary_2021)
+  value[index, "is_paid"] <- test_data$salary_2021
+  value[index, "is_worth"] <- prediction[1]
+  index <- index + 1
+}
+```
+
