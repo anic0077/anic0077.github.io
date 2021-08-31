@@ -1,0 +1,251 @@
+---
+title: "NBA_Player_value_predictor"
+author: "Alexander Nicholls"
+date: "31/08/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(janitor)
+library(tidyverse)
+library(hablar)
+library(corrplot)
+library(measurements)
+library(rpart)
+library(randomForest)
+library(olsrr)
+setwd("C:/Users/alexa/Documents/GitHub/anic0077.github.io/NBA_stats")
+```
+player_salary
+```{r}
+salary_2021 <- read.csv("Salary_2021.csv")
+
+```
+
+2021_regular_data
+```{r}
+
+regular_traditional2021<- read.csv("2021_regular_traditional.csv")
+regular_traditional2021$TEAM <- as.factor(regular_traditional2021$TEAM)
+names(regular_traditional2021)[1] <- "name"
+```
+5 year regular data
+```{r}
+combined_regular <- read.csv("regular_combined_5_traditional.csv")
+drops <- c("TEAM")
+combined_regular <- combined_regular[ , !(names(combined_regular) %in% drops)]
+agg_regular = aggregate(combined_regular,
+                by = list(combined_regular$PLAYER),
+                FUN = mean)
+drops <- c("PLAYER")
+agg_regular <- agg_regular[ , !(names(agg_regular) %in% drops)]
+names(agg_regular)[1] <- "name"
+```
+
+
+2021_playoff_data
+```{r}
+playoff_traditional2021<- read.csv("2021_playoff_traditional.csv")
+playoff_traditional2021$TEAM <- as.factor(playoff_traditional2021$TEAM)
+#editing the column names
+colnames(playoff_traditional2021) <- paste("Playoff", colnames(playoff_traditional2021), sep = "_")
+names(playoff_traditional2021)[1] <- "name"
+#names(playoff_traditional2021)[2] <- "TEAM"
+#names(playoff_traditional2021)[3] <- "AGE"
+```
+5 year playoff data
+```{r}
+combined_playoffs <- read.csv("playoff_combined_5_traditional.csv")
+drops <- c("TEAM")
+combined_playoffs <- combined_playoffs[ , !(names(combined_playoffs) %in% drops)]
+
+agg_playoffs = aggregate(combined_playoffs,
+                by = list(combined_playoffs$PLAYER),
+                FUN = mean)
+drops <- c("PLAYER")
+agg_playoffs <- agg_playoffs[ , !(names(agg_playoffs) %in% drops)]
+colnames(agg_playoffs) <- paste("Playoff", colnames(agg_playoffs), sep = "_")
+names(agg_playoffs)[1] <- "name"
+```
+
+Merging datasets
+```{r}
+#merging regular and salary
+Nba_2021 <- merge(regular_traditional2021,salary_2021,by="name")
+#merging regular and playoff
+NBA_2021 <- merge(Nba_2021,playoff_traditional2021, by='name')
+```
+merging 5 year datasets
+```{r}
+Nba_2021 <- merge(agg_regular,salary_2021,by="name")
+NBA_2021 <- merge(Nba_2021,agg_playoffs, by='name')
+```
+
+predicting salary
+```{r}
+model <- lm(salary_2021 ~ . - name - Playoff_AGE - AGE - FP - Playoff_FP, data = NBA_2021)
+#ols_step_forward_p(lin)
+step <- ols_step_both_p(model)
+step
+```
+constructing the optimal model
+```{r}
+NBA_salary <- lm(salary_2021 ~ PTS + X... + Playoff_STL + Playoff_DREB     + PF + AST + TOV + FT. + Playoff_L + Playoff_X... + PF + Playoff_OREB, data = NBA_2021)
+summary(NBA_salary)
+
+#NBA_salary <- lm(salary_2021 ~ FP + PF + X... + Playoff_FGA + Playoff_STL + Playoff_X... + TOV + Playoff_L + BLK + FT., data = NBA_2021)
+#summary(NBA_salary)
+```
+creates table of players value
+```{r}
+value <- data.frame(name=character(), value=numeric(), is_paid = numeric(), is_worth=numeric())
+index = 1
+Nba_2021_nd <-  NBA_2021[!duplicated(NBA_2021$name), ]
+for (i in Nba_2021_nd$name){
+  #print(i)
+  value[index, "name"] <- i
+  test_data <- Nba_2021_nd[Nba_2021_nd$name == i,]
+  prediction <- predict.lm(NBA_salary, test_data, interval = "confidence", type = "response")
+  #print(prediction[1] - test_data$salary_2021)
+  value[index, "value"] <-(prediction[1] - test_data$salary_2021)
+  value[index, "is_paid"] <- test_data$salary_2021
+  value[index, "is_worth"] <- prediction[1]
+  index <- index + 1
+}
+```
+Plotting above
+```{r}
+plot(value$is_paid, value$is_worth)
+abline(0,1)
+```
+trying out a cubist model
+```{r}
+library(Cubist)
+
+# Fit the model, note different syntax in calling the function
+cubist.model <- cubist(x= NBA_2021[,c(3:24, 26:28, 31:53, 54:56)], y=NBA_2021[,29])
+
+
+summary(cubist.model) # Print out the model
+
+cubist.predict<-predict(cubist.model, newdata = NBA_2021[,c(3:24, 26:28, 31:53, 54:56)])
+plot(NBA_2021$salary_2021,cubist.predict,xlab="observed",ylab="predicted")
+abline(0,1)
+```
+create table of value for cubic model
+```{r}
+value_cubic <- data.frame(name=character(), value=numeric(), is_paid = numeric(), is_worth=numeric())
+index = 1
+Nba_2021_nd <-  NBA_2021[!duplicated(NBA_2021$name), ]
+for (i in Nba_2021_nd$name){
+  #print(i)
+  value_cubic[index, "name"] <- i
+  test_data <- Nba_2021_nd[Nba_2021_nd$name == i,]
+  prediction <- predict(cubist.model, test_data, interval = "confidence", type = "response")
+  #print(prediction[1] - test_data$salary_2021)
+  value_cubic[index, "value"] <-(prediction[1] - test_data$salary_2021)
+  value_cubic[index, "is_paid"] <- test_data$salary_2021
+  value_cubic[index, "is_worth"] <- prediction[1]
+  index <- index + 1
+}
+```
+
+Random forest model
+```{r}
+# Random Forest
+library(randomForest)
+## Part i - Model fitting
+
+#ntree = number of bootstrap samples
+#(salary_2021 ~ . - name - Playoff_AGE - AGE - FP - Playoff_FP, data = NBA_2021, ntree = 500, importance = TRUE,do.trace = 10, proximity=TRUE)
+
+rf.model <- randomForest(salary_2021 ~ . - name - Playoff_AGE - AGE - FP - Playoff_FP, data = NBA_2021, ntree = 500, importance = TRUE,do.trace = 10, proximity=TRUE)
+
+plot(rf.model)
+
+round(importance(rf.model), 2)
+
+varImpPlot(rf.model)
+
+
+par(mfrow=c(2,2))
+#partialPlot(rf.model,soil,pH)
+#partialPlot(rf.model,soil,Elevation)
+#partialPlot(rf.model,soil,Gamma.K)
+#partialPlot(rf.model,soil,Valley_Bottom)
+
+
+rf.inb.predict<-predict(rf.model,NBA_2021)
+par(mfrow=c(1,1))
+plot(NBA_2021$salary_2021,rf.inb.predict,xlab="observed",ylab="in-bag prediction")
+abline(0,1)
+
+
+rf.oob.predict<-rf.model$predicted
+plot(NBA_2021$salary_2021,rf.oob.predict,xlab="observed",ylab="out-of-bag prediction")
+abline(0,1)
+```
+table for rf values
+```{r}
+value_rf <- data.frame(name=character(), value=numeric(), is_paid = numeric(), is_worth=numeric())
+index = 1
+Nba_2021_nd <-  NBA_2021[!duplicated(NBA_2021$name), ]
+for (i in Nba_2021_nd$name){
+  #print(i)
+  value_rf[index, "name"] <- i
+  test_data <- Nba_2021_nd[Nba_2021_nd$name == i,]
+  prediction <- predict(rf.model, test_data, interval = "confidence", type = "response")
+  #print(prediction[1] - test_data$salary_2021)
+  value_rf[index, "value"] <-(prediction[1] - test_data$salary_2021)
+  value_rf[index, "is_paid"] <- test_data$salary_2021
+  value_rf[index, "is_worth"] <- prediction[1]
+  index <- index + 1
+}
+```
+
+assessing the models
+```{r}
+accuracy <-function (actual,predict){
+  # Calculate RMSE and ME
+  rmse=sqrt(mean((actual-predict)^2))
+  me=mean(actual-predict)
+  # Calculate R2
+  sse=sum((actual-predict)^2)
+  sst=sum((actual-mean(actual))^2)
+  R2=1-sse/sst
+  # Calculate Concordance Correlation (rho, p)
+  k <- length(actual)
+  xb <- mean(actual)
+  yb <- mean(predict)
+  sx2 <- 1/k * sst
+  sy2 <- 1/k * sum((predict-yb)^2)
+  sxy <- 1/k * sum((actual-xb)*(predict-yb))
+  p <- 2 * sxy/(sx2 + sy2 + (yb - xb)^2)
+  # print our values    
+  cat("ME=", me, " RMSE=", rmse, " R2=", R2, " rho.c= ", p)
+  return(c(me,rmse,R2,p))}
+```
+
+```{r}
+r_forest<-accuracy(NBA_2021$salary_2021,rf.oob.predict)
+r_cubic<-accuracy(NBA_2021$salary_2021,cubist.predict)
+r_linear <-accuracy(NBA_2021$salary_2021, )
+```
+combining the results of the three classifiers
+```{r, warning=FALSE}
+value_combined <- rbind(value,value_cubic,value_rf)
+value_agg = aggregate(value_combined,
+                by = list(value_combined$name),
+                FUN = mean)
+drops <- c("name")
+value_agg <- value_agg[ , !(names(value_agg) %in% drops)]
+names(value_agg)[1] <- "name"
+```
+
+plotting above
+```{r}
+plot(value_agg$is_paid, value_agg$is_worth)
+abline(0, 1)
+```
+
