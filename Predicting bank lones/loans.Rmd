@@ -1,0 +1,61 @@
+---
+title: "Bank_lones"
+author: "Alexander Nicholls"
+date: "09/09/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+id <- read.csv("C:/Users/alexa/Documents/GitHub/anic0077.github.io/Predicting bank lones/Sample Prediction Dataset.csv")
+training <- read.csv("C:/Users/alexa/Documents/GitHub/anic0077.github.io/Predicting bank lones/Training Data.csv")
+test <- read.csv("C:/Users/alexa/Documents/GitHub/anic0077.github.io/Predicting bank lones/Test Data.csv")
+require(MASS)
+require(randomForest)
+require(irr)
+```
+
+looking
+```{r}
+print("training")
+str(training)
+print("test")
+str(test)
+```
+
+data cleaning
+```{r}
+colnames(test)[1] <- "Id"
+colnames(id)[1] <- "Id"
+colnames(id)[2] <- "Risk_Flag"
+test_complete <- merge(test, id, by = "Id")
+test_complete$Id <- test_complete$Id + 252000
+
+combined_data <- rbind(training, test_complete)
+```
+looknig
+```{r}
+combined_data[,5:10] <- lapply(combined_data[,5:10], as.factor)
+combined_data$Risk_Flag <- as.factor(combined_data$Risk_Flag)
+str(combined_data)
+```
+plotting
+```{r}
+#par(mfrow = c(4,4))
+#for (i in c(2:12)) {
+#  plot(combined_data$Risk_Flag, combined_data[,i], 
+#                 xlab = names(combined_data)[i],ylab = "Risk_Flag", 
+#                 lpars = list(col = "blue", lwd = 3))
+#}
+for (i in c(2:12)){
+  plot(combined_data$Risk_Flag, combined_data[,i])
+}
+```
+logistic model
+```{r}
+data <- combined_data[1:10000,]
+model <- glm(Risk_Flag ~. - Id - Risk_Flag, data = data, family = "binomial")
+
+```
+
