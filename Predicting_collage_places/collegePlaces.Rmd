@@ -1,0 +1,82 @@
+---
+title: "Collage_acceptance"
+author: "Alexander Nicholls"
+date: "08/09/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+admission <- read.csv("C:/Users/alexa/Documents/GitHub/anic0077.github.io/Predicting_collage_places/collegePlace.csv")
+require(MASS)
+require(randomForest)
+require(irr)
+```
+
+analysis
+```{r}
+
+admission$Gender <- as.factor(admission$Gender)
+admission$Stream <- as.factor(admission$Stream)
+admission$Hostel <- as.factor(admission$Hostel)
+admission$HistoryOfBacklogs <- as.factor(admission$HistoryOfBacklogs)
+admission$PlacedOrNot <- as.factor(admission$PlacedOrNot)
+str(admission)
+```
+plotting
+```{r}
+#hist(admission$PlacedOrNot)
+
+
+par(mfrow = c(2,2))
+for (i in c(1:7)) {
+  scatter.smooth(admission[,i], admission[,"PlacedOrNot"], 
+                 xlab = names(admission)[i],ylab = "PlacedOrNot", 
+                 lpars = list(col = "blue", lwd = 3))
+}
+```
+more plots
+```{r}
+par(mfrow = c(2,2))
+boxplot(CGPA ~ PlacedOrNot, data = admission,ylab="CGPA", outline=FALSE)
+```
+models
+```{r}
+lda.model <- lda(PlacedOrNot ~ .,data=admission)
+lda.model # show the model
+
+predict.lda <- predict(lda.model)
+```
+
+```{r}
+# We plot the first two linear discriminant functions and colour it by its classes
+par(mfrow = c(1, 1))
+plot(predict.lda$x[,1],col=predict.lda$class) # 
+
+ct <- table(predict.lda$class,admission$PlacedOrNot)
+# Proportion correctly predicted for each class
+diag(prop.table(ct))
+# Total percent correctly predicted
+sum(diag(prop.table(ct)))*100
+```
+random forest model
+```{r}
+library(randomForest)
+#ntree = number of bootstrap samples
+rf.model <- randomForest(PlacedOrNot ~ .,data=admission, ntree = 500, importance = TRUE)
+
+print(rf.model)
+
+varImpPlot(rf.model)
+
+predict.inb<-predict(rf.model,admission)
+ct <- table(predict.inb,admission$PlacedOrNot)
+ct
+
+predict.oob<-rf.model$predicted
+ct <- table(predict.oob,admission$PlacedOrNot)
+ct
+```
+
+
