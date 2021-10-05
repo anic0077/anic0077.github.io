@@ -248,4 +248,67 @@ plotting above
 plot(value_agg$is_paid, value_agg$is_worth)
 abline(0, 1)
 ```
+```{r}
+library(stats)
+pca <- princomp(NBA_2021[,c(3:24, 26:28, 31:53, 54:56)], cor = TRUE)
+train_reduced  <- predict(pca,NBA_2021[,c(3:24, 26:28, 31:53, 54:56)])
+#test_reduced  <- predict(pca,test)
+```
+
+```{r}
+library(caret)
+fitControl <- trainControl( method = "repeatedcv", number = 4, repeats = 4)
+fit <- train(salary_2021 ~ .- name - Playoff_AGE - AGE - FP - Playoff_FP, data = NBA_2021, method = "gbm", trControl = fitControl,verbose = FALSE)
+#predicted= predict(fit,x_test,type= "prob")[,2] 
+caret.pred <- predict(fit,NBA_2021)
+r_caret<-accuracy(NBA_2021$salary_2021,caret.pred)
+```
+```{r}
+plot(NBA_2021$salary_2021, caret.pred)
+abline(0, 1)
+```
+```{r}
+value_carot <- data.frame(name=character(), value=numeric(), is_paid = numeric(), is_worth=numeric())
+index = 1
+Nba_2021_nd <-  NBA_2021[!duplicated(NBA_2021$name), ]
+for (i in Nba_2021_nd$name){
+  #print(i)
+  value_carot[index, "name"] <- i
+  test_data <- Nba_2021_nd[Nba_2021_nd$name == i,]
+  prediction <- predict(fit, test_data, interval = "confidence", type = "response")
+  #print(prediction[1] - test_data$salary_2021)
+  value_carot[index, "value"] <-(prediction[1] - test_data$salary_2021)
+  value_carot[index, "is_paid"] <- test_data$salary_2021
+  value_carot[index, "is_worth"] <- prediction[1]
+  index <- index + 1
+}
+```
+
+
+predicting value of 1997 players
+```{r}
+nba_regular_1997 <- read.csv("C:/Users/alexa/Documents/GitHub/anic0077.github.io/NBA_stats/1997_regular_traditional.csv")
+names(nba_regular_1997)[1] <- "name"
+nba_playoffs_1997 <- read.csv("C:/Users/alexa/Documents/GitHub/anic0077.github.io/NBA_stats/1997_playoff_traditional.csv")
+
+colnames(nba_playoffs_1997) <- paste("Playoff", colnames(nba_playoffs_1997), sep = "_")
+names(nba_playoffs_1997)[1] <- "name"
+NBA_1997 <- merge(nba_regular_1997,nba_playoffs_1997, by='name')
+```
+making the table
+```{r}
+value_1997_carot <- data.frame(name=character(), is_worth=numeric())
+index = 1
+NBA_1997_nd <-  NBA_1997[!duplicated(NBA_1997$name), ]
+for (i in NBA_1997_nd$name){
+  #print(i)
+  value_1997_carot[index, "name"] <- i
+  test_data <- NBA_1997_nd[NBA_1997_nd$name == i,]
+  prediction <- predict(NBA_salary, test_data, interval = "confidence", type = "response")
+  #print(prediction[1] - test_data$salary_2021)
+  value_1997_carot[index, "is_worth"] <- prediction[1]
+  index <- index + 1
+}
+```
+
 
