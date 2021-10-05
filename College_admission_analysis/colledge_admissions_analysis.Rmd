@@ -1,0 +1,176 @@
+---
+title: "College_admission"
+author: "Alexander Nicholls"
+date: "02/09/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+admission <- read.csv("C:/Users/alexa/Documents/GitHub/anic0077.github.io/College_admission_analysis/binary1.csv")
+require(MASS)
+require(randomForest)
+require(irr)
+```
+
+initial analysis
+```{r}
+str(admission)
+```
+```{r}
+hist(admission$admit)
+
+
+par(mfrow = c(2,2))
+for (i in c(2:4)) {
+  scatter.smooth(admission[,i], admission[,"admit"], 
+                 xlab = names(admission)[i],ylab = "admit", 
+                 lpars = list(col = "blue", lwd = 3))
+}
+```
+```{r}
+admission$admit <- as.factor(admission$admit)
+```
+```{r}
+par(mfrow = c(2,2))
+boxplot(gre ~ admit, data = admission,ylab="gre", outline=FALSE)
+boxplot(gpa ~ admit, data = admission,ylab="gpa", outline=FALSE)
+boxplot(rank ~ admit, data = admission,ylab="rank", outline=FALSE)
+
+```
+preliminary data analysis reveals that data appears to be normally distributed. There is some variation in the distribution of data between the two groups which could possibly be leveraged to build a prediction model. error bars indicate that students at both extreme of each predictior are present in both groups which may make classification difficult
+
+
+lda model
+```{r}
+lda.model <- lda(admit ~ .,data=admission)
+lda.model # show the model
+
+predict.lda <- predict(lda.model)
+```
+```{r}
+# We plot the first two linear discriminant functions and colour it by its classes
+par(mfrow = c(1, 1))
+plot(predict.lda$x[,1],col=predict.lda$class) # 
+
+ct <- table(predict.lda$class,admission$admit)
+# Proportion correctly predicted for each class
+diag(prop.table(ct))
+# Total percent correctly predicted
+sum(diag(prop.table(ct)))*100
+```
+```{r}
+# Observation agreement, p0
+p0 = sum(diag(prop.table(ct)))
+# pe = chance agreement
+sumrow = rowSums(prop.table(ct))
+sumcol = colSums(prop.table(ct))
+pe=sum(sumrow*sumcol)
+kappa = (p0-pe)/(1-pe)
+kappa
+```
+random forest model
+```{r}
+library(randomForest)
+#ntree = number of bootstrap samples
+rf.model <- randomForest(admit ~ .,data=admission, ntree = 500, importance = TRUE)
+
+print(rf.model)
+
+varImpPlot(rf.model)
+
+predict.inb<-predict(rf.model,admission)
+ct <- table(predict.inb,admission$admit)
+ct
+
+predict.oob<-rf.model$predicted
+ct <- table(predict.oob,admission$admit)
+ct
+```
+validating lda model
+```{r}
+## Data split for validation
+
+set.seed(2)
+# First we create an index by randomly splitting the data 75% as calibration data and 25% as validation data.
+# We do that by creating Index 
+index <- sample(1:nrow(admission), size=0.75*nrow(admission))   
+#Split data
+train <- admission[index,]
+valid <- admission[-index,]
+
+# LDA model
+lda.model <- lda(admit ~ .,data=admission)
+predict.lda <- predict(lda.model, newdata = valid)
+
+ct.lda <- table(predict.lda$class,valid$admit)
+ct.lda
+# Proportion correctly predicted for each class
+diag(prop.table(ct.lda))
+# Total percent correctly predicted
+sum(diag(prop.table(ct.lda)))*100
+
+# Observation agreement, p0
+p0 = sum(diag(prop.table(ct.lda)))
+# pe = chance agreement
+sumrow = rowSums(prop.table(ct.lda))
+sumcol = colSums(prop.table(ct.lda))
+pe=sum(sumrow*sumcol)
+kappa.lda = (p0-pe)/(1-pe)
+kappa.lda
+```
+doing the same for the rf model
+```{r}
+rf.model <- randomForest(admit ~ .,data=admission, ntree = 500, importance = TRUE)
+
+predict.rf<-predict(rf.model,newdata = valid)
+ct.rf <- table(predict.rf,valid$admit)
+ct.rf
+
+
+# Proportion correctly predicted for each class
+diag(prop.table(ct.rf))
+# Total percent correctly predicted
+sum(diag(prop.table(ct.rf)))*100
+
+# Observation agreement, p0
+p0 = sum(diag(prop.table(ct.rf)))
+# pe = chance agreement
+sumrow = rowSums(prop.table(ct.rf))
+sumcol = colSums(prop.table(ct.rf))
+pe=sum(sumrow*sumcol)
+kappa.rf = (p0-pe)/(1-pe)
+kappa.rf
+```
+calculating sensitivity and specificity
+```{r}
+#LDA
+ct.lda
+tp<-ct.lda[2,2] # true positive
+fn<-sum(ct.lda[1,2]) # false negative 
+
+fp<-sum(ct.lda[2,1]) # false positive
+tn<-sum(ct.lda[1,1]) # true negative
+
+sensitivity.lda <- tp/(tp+fn) # how often does it predict correctly a good wine
+specificity.lda <- tn/(fp+tn) # how often does it predict correctly not a good wine
+sensitivity.lda 
+specificity.lda
+```
+```{r}
+#rf
+#LDA
+ct.rf
+tp<-ct.rf[2,2] # true positive
+fn<-sum(ct.rf[1,2]) # false negative 
+
+fp<-sum(ct.rf[2,1]) # false positive
+tn<-sum(ct.rf[1,1]) # true negative
+
+sensitivity.rf <- tp/(tp+fn) # how often does it predict correctly a good wine
+specificity.rf <- tn/(fp+tn) # how often does it predict correctly not a good wine
+sensitivity.rf 
+specificity.rf
+```
+Conclusion- rf model is has a slightly higher specificity and much higher sensitivity than lda, and a significantly higher sensitivity. The sensitivity is only 55% however so this model is clearly limited, this is not supprising as initial data exploration highlighted that no variable clearly distinguished the two classes
