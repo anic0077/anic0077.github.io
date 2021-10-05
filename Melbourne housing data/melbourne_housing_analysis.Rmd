@@ -1,0 +1,124 @@
+---
+title: "melbourn housing data"
+author: "Alexander Nicholls"
+date: "02/09/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyr)
+
+houses <- read.csv("C:/Users/alexa/Documents/GitHub/anic0077.github.io/Melbourne housing data/Melbourne_housing_FULL.csv")
+
+houses$Suburb <- as.factor(houses[,1])
+houses$Type <- as.factor(houses[,4])
+houses$Method <- as.factor(houses[,6])
+houses[,7] <- as.factor(houses[,7])
+houses[,10] <- as.factor(houses[,10])
+houses[,17] <- as.factor(houses[,17])
+houses[,20] <- as.factor(houses[,20])
+houses[,21] <- as.factor(houses[,21])
+houses[,9] <- as.numeric(houses[,9])
+houses[,8] <- as.Date(houses[,8])
+houses[,5] <- as.numeric(houses[,5])
+houses <- houses[!is.na(houses$Price),]
+str(houses)
+#houses[,c(1,4,6,7,10,17,20)] <- as.factor(houses[,c(1,4,6,7,10,17,20)])
+```
+initial data exploration
+```{r}
+
+#some data cleaning
+count = 0
+for (i in houses$YearBuilt){
+  count <- count + 1
+  if (is.na(i) == FALSE)
+  {
+    if (i < 1700){
+    houses <- houses[-count,]
+  }
+  }
+  
+}
+  
+
+#par(mfrow = c(2,2))
+for (i in c(3,4,8:17,20,21)) {
+  plot(houses[,i], houses[,"Price"], 
+                 xlab = names(houses)[i],ylab = "Price", 
+                 lpars = list(col = "blue", lwd = 3))
+}
+```
+function for assessing model accuracy
+```{r}
+accuracy <-function (actual,predict){
+  # Calculate RMSE and ME
+  rmse=sqrt(mean((actual-predict)^2))
+  me=mean(actual-predict)
+  # Calculate R2
+  sse=sum((actual-predict)^2)
+  sst=sum((actual-mean(actual))^2)
+  R2=1-sse/sst
+  # Calculate Concordance Correlation (rho, p)
+  k <- length(actual)
+  xb <- mean(actual)
+  yb <- mean(predict)
+  sx2 <- 1/k * sst
+  sy2 <- 1/k * sum((predict-yb)^2)
+  sxy <- 1/k * sum((actual-xb)*(predict-yb))
+  p <- 2 * sxy/(sx2 + sy2 + (yb - xb)^2)
+  # print our values    
+  cat("ME=", me, " RMSE=", rmse, " R2=", R2, " rho.c= ", p)
+  return(c(me,rmse,R2,p))}
+```
+
+
+modelling price
+```{r}
+library(Cubist)
+
+# Fit the model, note different syntax in calling the function
+cubist.model <- cubist(x= houses[,c(1,3,4,6:7,9:21)], y=houses[,5])
+
+
+summary(cubist.model) # Print out the model
+
+cubist.predict<-predict(cubist.model, newdata = houses[,c(1,3,4,6:21)])
+plot(houses$Price,cubist.predict,xlab="observed",ylab="predicted")
+abline(0,1)
+```
+assessing model accuracy
+```{r}
+accuracy(houses$Price, cubist.predict)
+#length(cubist.predict)
+#dim(houses)
+head(houses$Price)
+head(cubist.predict)
+```
+```{r}
+library(ggplot2)
+# Option 1
+ggplot(houses, aes(x = factor(Suburb), y = Price)) + 
+  geom_bar(stat = "summary", fun = "mean")
+
+# Option 2
+ggplot(houses, aes(x = factor(Suburb), y = Price)) + 
+  stat_summary(fun = "mean", geom = "bar")
+```
+```{r}
+library(tidyverse)
+par(mar=c(3.1,12,4.1,2.1), mgp = c(11, 1, 0))
+boxplot(houses$Price ~ houses$Regionname, horizontal = TRUE, ylab = "Region Name", xlab = "Price", main = "Boxplot of price of houses by region", las = 1)
+```
+```{r}
+#scatter
+library(car)
+car::scatterplotMatrix(houses[,c(5,9,11:14)], spread = FALSE, smoother.args = list(lty = 2), main = "Scatter Plot Matrix")
+```
+correlation matrix
+```{r}
+library(corrgram)
+corrgram(houses[,c(3,5,9,11:14)], order=FALSE, lower.panel=panel.shade, upper.panel=panel.pie, text.panel=panel.txt, main="Corrgram of housing data intercorrelations")
+```
+
